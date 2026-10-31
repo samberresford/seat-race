@@ -3,11 +3,14 @@ import os
 import numpy as np
 import pandas as pd
 import streamlit as st
-from model import SQUAD_FILE, fit_learning, head_to_heads, load_results
+from model import fit_learning, head_to_heads, load_results
+from storage import load_pieces, load_squad, require_password
+
+require_password()
 
 st.title("What the app has learned")
 
-test_mode = st.toggle("Use the pretend test season", value=not os.path.exists("pieces.csv"))
+test_mode = st.toggle("Use the pretend test season", value=load_pieces().empty)
 
 if test_mode:
     if not os.path.exists("sim_pieces.csv"):
@@ -17,7 +20,10 @@ if test_mode:
     squad = pd.read_csv("sample_squad.csv")
 else:
     results = load_results()
-    squad = pd.read_csv(SQUAD_FILE)
+    squad = load_squad()
+    if squad.empty:
+        st.info("No athletes yet. Add your squad on the Squad page first.")
+        st.stop()
     if not results.empty and "boat_class" in results:
         results = results[results["source"] == "pieces"]   # calculator results don't record the boat
 
@@ -33,7 +39,7 @@ if out is None:
 # ---- Headline numbers --------------------------------------------------------
 c1, c2, c3 = st.columns(3)
 c1.metric("Results learned from", out["results_used"])
-c2.metric("Erg explains", f"{out['erg_share']:.0%}", help="Share of the differences between athletes "
+c2.metric("Erg explains", f"{out['erg_share']:.0%}" if out["results_used"] >= 10 else "Not yet", help="Share of the differences between athletes "
           "on the water that their ergs account for. The rest is boat-moving: technique, rhythm, skill.")
 c3.metric("Noise per result", f"±{out['noise']:.2f} s/500", help="How much a single result wobbles. "
           "Measured from the data once there are 10+ results.")

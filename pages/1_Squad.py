@@ -1,15 +1,13 @@
 import pandas as pd
 import streamlit as st
-from model import SQUAD_FILE, fit_learning, load_results, on_water_order, to_seconds
+from model import fit_learning, load_results, on_water_order, to_seconds
+from storage import load_squad, save_squad
 
 st.title("Squad")
 st.caption("Who's in the squad, their side and their best 2k. Nobody types a technique score: "
            "the app learns that from seat racing.")
 
-squad = pd.read_csv(SQUAD_FILE)
-for column in ["name", "side", "best_2k", "coach_rank"]:
-    if column not in squad:
-        squad[column] = None
+squad = load_squad()
 
 # ---- Edit the squad ------------------------------------------------------------
 st.subheader("Athletes")
@@ -43,7 +41,7 @@ if st.button("Save squad", type="primary"):
         for issue in issues:
             st.error(issue)
     else:
-        edited.dropna(subset=["name"]).to_csv(SQUAD_FILE, index=False)
+        save_squad(edited.dropna(subset=["name"]))
         st.success(f"Saved {len(edited.dropna(subset=['name']))} athletes.")
 
 # ---- On-water order ------------------------------------------------------------

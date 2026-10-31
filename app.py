@@ -1,7 +1,5 @@
-import os
-
-import pandas as pd
 import streamlit as st
+from storage import load_pieces, where
 
 st.set_page_config(page_title="Seat Racing", page_icon="🚣")
 st.title("Seat Racing")
@@ -20,10 +18,11 @@ st.markdown(
     "explain, each athlete's boat-moving score, and each stroke's effect."
 )
 
-pieces = pd.read_csv("pieces.csv") if os.path.exists("pieces.csv") else pd.DataFrame()
+pieces = load_pieces()
 c1, c2 = st.columns(2)
 c1.metric("Pieces recorded", len(pieces))
 c2.metric("Sessions", pieces["session"].nunique() if not pieces.empty else 0)
+st.caption(f"Data is saved to: {where()}")
 
 # ---- Quick calculator (nothing is saved) ---------------------------------------
 with st.expander("Quick calculator: one swap, worked out by hand"):

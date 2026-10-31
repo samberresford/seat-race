@@ -6,3 +6,6 @@ pieces.csv
 pieces.csv
 saved_plan.json
 must_race.json
+gsheets_key.json
+.streamlit/secrets.toml
+gsheets_key.json

@@ -103,16 +103,4 @@ else:
         winner, loser = (x, y) if avg > 0 else (y, x)
         st.success(f"{winner} beat {loser} directly by {abs(avg):.2f} s per 500 m over {n} race(s).")
 
-# ---- Delete a calculator result -----------------------------------------
-# results from Enter Piece are deleted on that page; this only covers the calculator
-calc = everything[everything["source"] == "calculator"].reset_index(drop=True)
-if not calc.empty:
-    st.subheader("Delete a calculator result")
-    labels = [f"{r.date}: {r.athlete_a} v {r.athlete_b} ({r.difference:+.1f} s)" for r in calc.itertuples()]
-    choice = st.selectbox("Pick the result to remove", range(len(calc)), format_func=lambda i: labels[i])
-    sure = st.checkbox("Yes, delete this result")
-    if st.button("Delete", disabled=not sure):
-        keep = calc.drop(index=choice)
-        keep[["date", "athlete_a", "athlete_b", "m1", "m2", "piece_length", "difference"]].to_csv(
-            "seat_races.csv", index=False)
-        st.rerun()
+st.caption("To remove a result, delete the piece on the Enter Piece page.")

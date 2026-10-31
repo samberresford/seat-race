@@ -1,19 +1,23 @@
 from itertools import combinations
 
-import json
-import os
 from datetime import date
 
 import numpy as np
 import pandas as pd
 import streamlit as st
-from model import BOATS, SQUAD_FILE, fit_learning, load_results, short_name, to_seconds
+from model import BOATS, fit_learning, load_results, short_name, to_seconds
+from storage import load_json, load_squad, require_password, save_json
+
+require_password()
 
 st.title("Plan")
 st.caption("Plans the swaps a coach would want: close calls, unanswered questions and people who "
            "haven't raced much, picked with some randomness so nobody can predict the next swap.")
 
-squad = pd.read_csv(SQUAD_FILE)
+squad = load_squad()
+if squad.empty:
+    st.info("No athletes yet. Add your squad on the Squad page first.")
+    st.stop()
 split = dict(zip(squad["name"], squad["best_2k"].apply(to_seconds) / 4))
 
 # ---- What we know so far -----------------------------------------------------
@@ -43,10 +47,7 @@ if not results.empty:
             stroke_pairs.add(frozenset((r.athlete_a, r.athlete_b)))
 
 # pairs the Selection page asked for: race these first
-must_race = set()
-if os.path.exists("must_race.json"):
-    with open("must_race.json") as f:
-        must_race = {frozenset(pair) for pair in json.load(f)}
+must_race = {frozenset(pair) for pair in (load_json("must_race") or [])}
 
 def answered(a, b, clear=0.5):
     margins = direct.get(frozenset((a, b)), [])
@@ -298,8 +299,7 @@ if st.button("Use this plan: save it for recording results", type="primary"):
                 "swap": "Start crews" if p["swap"] is None else f"{p['swap'][0]} ↔ {p['swap'][1]}",
             } for p in pieces],
         })
-    with open("saved_plan.json", "w") as f:
-        json.dump(plan, f, indent=1)
+    save_json("saved_plan", plan)
     st.success("Plan saved. Open Enter Piece to record each piece as it's rowed.")
 
 # ---- Show the plan -----------------------------------------------------------

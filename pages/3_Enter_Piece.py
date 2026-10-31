@@ -1,28 +1,36 @@
-import json
-import os
 from datetime import date
 
 import pandas as pd
 import streamlit as st
-from model import SQUAD_FILE, head_to_heads
+from model import head_to_heads
+from storage import load_json, load_pieces, load_squad, require_password, save_pieces
+
+require_password()
 
 st.title("Enter a piece")
 
-squad = pd.read_csv(SQUAD_FILE)
+squad = load_squad()
+if squad.empty:
+    st.info("No athletes yet. Add your squad on the Squad page first.")
+    st.stop()
 SEATS = {"8+": 8, "4- / 4+": 4, "2-": 2}
-pieces_so_far = pd.read_csv("pieces.csv") if os.path.exists("pieces.csv") else pd.DataFrame(
-    columns=["session", "piece", "boat_class", "piece_length", "boat1", "boat2", "margin", "lane1", "conditions"])
+pieces_so_far = load_pieces()
 
-def save_piece(session, boat_class, piece_length, boat1, boat2, margin, lane1, conditions):
-    piece_no = int((pieces_so_far["session"] == session).sum()) + 1
+def recorded(session):
+    """Piece numbers already saved for a session."""
+    return set(pieces_so_far.loc[pieces_so_far["session"] == session, "piece"].dropna().astype(int))
+
+def save_piece(session, boat_class, piece_length, boat1, boat2, margin, lane1, conditions, piece_no=None):
+    if piece_no is None:                                   # by hand: the next number after the last one
+        piece_no = max(recorded(session), default=0) + 1
     row = pd.DataFrame([{
         "session": session, "piece": piece_no, "boat_class": boat_class,
         "piece_length": piece_length, "boat1": "|".join(boat1),
         "boat2": "|".join(boat2), "margin": round(margin, 1),
         "lane1": lane1, "conditions": conditions,
     }])
-    # rewrite the whole file, so older files without the newer columns still line up
-    pd.concat([pieces_so_far, row], ignore_index=True).to_csv("pieces.csv", index=False)
+    everything = pd.concat([pieces_so_far, row], ignore_index=True).sort_values(["session", "piece"], kind="stable")
+    save_pieces(everything)
     return piece_no
 
 def lane_and_conditions(session, key):
@@ -63,10 +71,7 @@ def margin_input(key):
         return None
 
 # ---- From the saved plan ------------------------------------------------------
-plan = None
-if os.path.exists("saved_plan.json"):
-    with open("saved_plan.json") as f:
-        plan = json.load(f)
+plan = load_json("saved_plan")
 
 mode = st.radio("How are you entering this?", ["From the saved plan", "Crews by hand"],
                 horizontal=True, index=0 if plan else 1, disabled=plan is None)
@@ -75,20 +80,22 @@ if mode == "From the saved plan" and plan:
     names = [s["name"] for s in plan["sessions"]]
     session = st.selectbox("Session", names)
     planned = plan["sessions"][names.index(session)]["pieces"]
-    done = int((pieces_so_far["session"] == session).sum())
+    # the next planned piece that hasn't been saved (so a deleted piece can be re-recorded)
+    missing = [k for k in range(1, len(planned) + 1) if k not in recorded(session)]
 
-    if done >= len(planned):
+    if not missing:
         st.success(f"All {len(planned)} pieces of {session} are recorded.")
     else:
-        p = planned[done]
-        st.subheader(f"Piece {done + 1} of {len(planned)}: {p['swap']}")
+        number = missing[0]
+        p = planned[number - 1]
+        st.subheader(f"Piece {number} of {len(planned)}: {p['swap']}")
         seat_names = ["Stroke"] + [str(k) for k in range(len(p["boat1"]) - 1, 1, -1)] + ["Bow"]
         st.table(pd.DataFrame({"Seat": seat_names[:len(p["boat1"])], "Boat 1": p["boat1"], "Boat 2": p["boat2"]}))
         margin = margin_input("plan")
         lane1, conditions = lane_and_conditions(session, "plan")
         if st.button("Save piece", type="primary", disabled=margin is None):
             n = save_piece(session, plan["boat_class"], plan["piece_length"], p["boat1"], p["boat2"],
-                           margin, lane1, conditions)
+                           margin, lane1, conditions, piece_no=number)
             st.toast(f"Saved piece {n}")
             st.rerun()
         st.caption("Crews changed on the water? Switch to 'Crews by hand' for this piece.")
@@ -147,6 +154,20 @@ if not this_session.empty:
                     " (stroke change, not used)" if r.stroke_swap else "")
             st.write(f"Pieces {r.pieces}: {winner} beat {loser} by {abs(r.difference):.1f} s{note}")
 
-    if st.button("Delete the last piece of this session"):
-        pieces_so_far.drop(index=this_session.index[-1]).to_csv("pieces.csv", index=False)
-        st.rerun()
+# ---- Delete one piece (only one at a time, and only after you've checked it) ------------
+if not pieces_so_far.empty:
+    with st.expander("Delete a piece entered by mistake"):
+        sessions = list(pieces_so_far["session"].unique())
+        which_session = st.selectbox("Session", sessions, key="del_session")
+        options = pieces_so_far[pieces_so_far["session"] == which_session]
+        which = st.selectbox("Piece", options.index, key="del_piece",
+                             format_func=lambda i: f"Piece {int(options.loc[i, 'piece'])}: margin {options.loc[i, 'margin']:+.1f} s")
+        chosen = options.loc[which]
+        st.write(f"Boat 1: {chosen['boat1'].replace('|', ', ')}  \nBoat 2: {chosen['boat2'].replace('|', ', ')}")
+        sure = st.checkbox(f"Yes, delete piece {int(chosen['piece'])} of {which_session}. This can't be undone.",
+                           key="del_sure")
+        if st.button("Delete this piece", disabled=not sure):
+            save_pieces(pieces_so_far.drop(index=which))
+            st.session_state.pop("del_sure", None)
+            st.toast("Piece deleted")
+            st.rerun()

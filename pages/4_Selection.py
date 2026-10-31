@@ -1,16 +1,20 @@
-import json
 import math
-import os
 
 import numpy as np
 import pandas as pd
 import streamlit as st
-from model import BOATS, SQUAD_FILE, fit_learning, load_results, to_seconds
+from model import BOATS, fit_learning, load_results, to_seconds
+from storage import load_squad, require_password, save_json
+
+require_password()
 
 st.title("Selection")
 st.caption("Who's in, who's out, how sure the evidence is, and which pieces would settle the rest.")
 
-squad = pd.read_csv(SQUAD_FILE)
+squad = load_squad()
+if squad.empty:
+    st.info("No athletes yet. Add your squad on the Squad page first.")
+    st.stop()
 split = dict(zip(squad["name"], squad["best_2k"].apply(to_seconds) / 4))
 side_of = dict(zip(squad["name"], squad["side"]))
 
@@ -120,6 +124,5 @@ else:
         st.write(f"- {a} v {b}")
     st.caption("If both athletes in a pair are your strokes, the plan races them by swapping the strokes between boats.")
     if st.button("Prioritise these in the next plan", type="primary"):
-        with open("must_race.json", "w") as f:
-            json.dump([list(pair) for pair in needed], f)
+        save_json("must_race", [list(pair) for pair in needed])
         st.success("Saved. The Seat Racing plan will put these pairs in opposite boats and race them first.")

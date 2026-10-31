@@ -7,8 +7,6 @@ import os
 import numpy as np
 import pandas as pd
 
-# the real squad stays private; anyone else gets the made-up sample squad
-SQUAD_FILE = "squad.csv" if os.path.exists("squad.csv") else "sample_squad.csv"
 
 # seats in each boat class
 BOATS = {"8+": 8, "4- / 4+": 4, "2-": 2}
@@ -92,23 +90,14 @@ def head_to_heads(pieces):
 
 
 def load_results():
-    """Every seat race result: from the Enter Piece page and from the calculator."""
-    parts = []
-    if os.path.exists("pieces.csv"):
-        found = head_to_heads(pd.read_csv("pieces.csv"))
-        if not found.empty:
-            found = found[~found["lanes_changed"]]
-            found["source"] = "pieces"
-            parts.append(found)
-    if os.path.exists("seat_races.csv"):
-        calc = pd.read_csv("seat_races.csv")
-        if not calc.empty:
-            calc["source"] = "calculator"
-            calc["stroke_swap"] = False
-            parts.append(calc)
-    if not parts:
-        return pd.DataFrame()
-    return pd.concat(parts, ignore_index=True)
+    """Every seat race result found in the recorded pieces."""
+    from storage import load_pieces
+    found = head_to_heads(load_pieces())
+    if found.empty:
+        return found
+    found = found[~found["lanes_changed"]].reset_index(drop=True)
+    found["source"] = "pieces"
+    return found
 
 
 def fit_learning(results, squad, tech_spread=1.5, stroke_spread=1.0, noise=0.5):
