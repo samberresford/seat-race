@@ -5,6 +5,8 @@ With a Google Sheet set up (online, or on your Mac with gsheets_key.json), every
 to the sheet. Each squad gets its own tabs and its own password, and only ever sees its own data.
 Nobody using the app sees the sheet itself: only you and the app's service account can open it.
 Without a sheet, the app falls back to CSV and JSON files in this folder.
+In the public demo (demo = true in its secrets), every visitor gets their own copy of the
+made-up squad and pretend season, kept only in their browser tab, so nobody can change it for anyone else.
 """
 import hmac
 import json
@@ -43,8 +45,21 @@ def _sheet():
     return client.open_by_url(url)
 
 
+def demo():
+    return bool(_setting("demo"))
+
+
 def where():
+    if demo():
+        return "this browser tab only (it's a demo: changes vanish when you close it)"
     return "Google Sheet" if _sheet() is not None else "files on this computer"
+
+
+def _demo_data(name, start):
+    """The demo keeps each visitor's data in their own session, starting from the made-up files."""
+    if name not in st.session_state:
+        st.session_state[name] = start()
+    return st.session_state[name]
 
 
 def _squads():
@@ -103,7 +118,9 @@ def _local_squad_file():
 
 
 def load_squad():
-    if _sheet() is not None:
+    if demo():
+        table = _demo_data("demo_squad", lambda: pd.read_csv("sample_squad.csv")).copy()
+    elif _sheet() is not None:
         table = _read("squad", SQUAD_COLUMNS, _local_squad_file())
     else:
         table = pd.read_csv(_local_squad_file())
@@ -115,14 +132,19 @@ def load_squad():
 
 
 def save_squad(table):
-    if _sheet() is not None:
+    if demo():
+        st.session_state["demo_squad"] = table.copy()
+    elif _sheet() is not None:
         _write("squad", SQUAD_COLUMNS, table)
     else:
         table.to_csv(_local_squad_file(), index=False)
 
 
 def load_pieces():
-    if _sheet() is not None:
+    if demo():
+        start = lambda: pd.read_csv("sim_pieces.csv") if os.path.exists("sim_pieces.csv") else pd.DataFrame(columns=PIECE_COLUMNS)
+        table = _demo_data("demo_pieces", start).copy()
+    elif _sheet() is not None:
         table = _read("pieces", PIECE_COLUMNS, "pieces.csv")
     elif os.path.exists("pieces.csv"):
         table = pd.read_csv("pieces.csv")
@@ -138,7 +160,9 @@ def load_pieces():
 
 def save_pieces(table):
     """Saves the whole pieces table, so anything removed here is removed from the sheet too."""
-    if _sheet() is not None:
+    if demo():
+        st.session_state["demo_pieces"] = table.copy()
+    elif _sheet() is not None:
         _write("pieces", PIECE_COLUMNS, table)
     else:
         table.to_csv("pieces.csv", index=False)
@@ -146,6 +170,8 @@ def save_pieces(table):
 
 # ---- Small settings: the saved plan, pairs to race next --------------------------------
 def load_json(name):
+    if demo():
+        return _demo_data("demo_settings", dict).get(name)
     if _sheet() is not None:
         settings = _read("settings", ["key", "value"])
         found = settings[settings["key"] == name]["value"] if not settings.empty else []
@@ -157,7 +183,9 @@ def load_json(name):
 
 
 def save_json(name, value):
-    if _sheet() is not None:
+    if demo():
+        _demo_data("demo_settings", dict)[name] = value
+    elif _sheet() is not None:
         settings = _read("settings", ["key", "value"])
         settings = settings[settings["key"] != name] if not settings.empty else pd.DataFrame(columns=["key", "value"])
         settings = pd.concat([settings, pd.DataFrame([{"key": name, "value": json.dumps(value)}])])
@@ -239,6 +267,9 @@ def require_password():
     squads, admin, single = _squads(), _setting("admin_password"), _setting("password")
     if not (squads or admin or single):
         st.session_state.admin = True                    # open app (demo, or your Mac without passwords)
+        if demo():
+            st.sidebar.info("Demo with a made-up squad and a pretend season. Try anything: "
+                            "your changes only last until you close the tab.")
         return
 
     if not st.session_state.get("signed_in"):
