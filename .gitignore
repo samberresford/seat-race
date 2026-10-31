@@ -2,3 +2,7 @@ squad.csv
 seat_races.csv
 .DS_Store
 __pycache__/
+pieces.csv
+pieces.csv
+saved_plan.json
+must_race.json

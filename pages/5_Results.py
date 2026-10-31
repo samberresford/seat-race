@@ -2,16 +2,20 @@ import os
 import numpy as np
 import pandas as pd
 import streamlit as st
+from model import load_results
 
 st.title("Results")
 
-if not os.path.exists("seat_races.csv"):
-    st.info("No results yet. Save a seat race on the calculator page first.")
+everything = load_results()
+if everything.empty:
+    st.info("No results yet. Record pieces on the Enter Piece page.")
     st.stop()
 
-races = pd.read_csv("seat_races.csv")
+# stroke swaps change the rhythm of both boats, so they're kept out of the ratings
+strokes = everything[everything["stroke_swap"]]
+races = everything[~everything["stroke_swap"]].reset_index(drop=True)
 if races.empty:
-    st.info("No results yet. Save a seat race on the calculator page first.")
+    st.info("Only stroke swaps so far. Seat races with the same strokes will appear here.")
     st.stop()
 
 # seconds per 500 m, so pieces of different lengths can be compared
@@ -19,6 +23,11 @@ races["per_500"] = races["difference"] * 500 / races["piece_length"]
 
 st.subheader("Every race")
 st.dataframe(races, hide_index=True)
+
+if not strokes.empty:
+    st.subheader("Stroke swaps")
+    st.write("Kept out of the ratings: changing the stroke changes the whole boat's rhythm.")
+    st.dataframe(strokes, hide_index=True)
 
 # each race counts for both athletes: plus for A, minus for B
 a_side = pd.DataFrame({"athlete": races["athlete_a"], "per_500": races["per_500"]})
@@ -94,13 +103,16 @@ else:
         winner, loser = (x, y) if avg > 0 else (y, x)
         st.success(f"{winner} beat {loser} directly by {abs(avg):.2f} s per 500 m over {n} race(s).")
 
-# ---- Delete a result -------------------------------------------------------
-st.subheader("Delete a result")
-labels = [f"{r.date}: {r.athlete_a} v {r.athlete_b} ({r.difference:+.1f} s)" for r in races.itertuples()]
-choice = st.selectbox("Pick the result to remove", range(len(races)), format_func=lambda i: labels[i])
-sure = st.checkbox("Yes, delete this result")
-
-if st.button("Delete", disabled=not sure):
-    races = races.drop(index=choice)
-    races.drop(columns="per_500").to_csv("seat_races.csv", index=False)
-    st.rerun()
+# ---- Delete a calculator result -----------------------------------------
+# results from Enter Piece are deleted on that page; this only covers the calculator
+calc = everything[everything["source"] == "calculator"].reset_index(drop=True)
+if not calc.empty:
+    st.subheader("Delete a calculator result")
+    labels = [f"{r.date}: {r.athlete_a} v {r.athlete_b} ({r.difference:+.1f} s)" for r in calc.itertuples()]
+    choice = st.selectbox("Pick the result to remove", range(len(calc)), format_func=lambda i: labels[i])
+    sure = st.checkbox("Yes, delete this result")
+    if st.button("Delete", disabled=not sure):
+        keep = calc.drop(index=choice)
+        keep[["date", "athlete_a", "athlete_b", "m1", "m2", "piece_length", "difference"]].to_csv(
+            "seat_races.csv", index=False)
+        st.rerun()

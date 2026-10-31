@@ -1,44 +1,65 @@
+import pandas as pd
 import streamlit as st
-from model import BOATS, load_squad, tech_slider
+from model import SQUAD_FILE, fit_learning, load_results, on_water_order, to_seconds
 
 st.title("Squad")
+st.caption("Who's in the squad, their side and their best 2k. Nobody types a technique score: "
+           "the app learns that from seat racing.")
 
-tech_impact = tech_slider()          # the slider now lives in the sidebar
-squad = load_squad(tech_impact)      # all the maths is in model.py
+squad = pd.read_csv(SQUAD_FILE)
+for column in ["name", "side", "best_2k", "coach_rank"]:
+    if column not in squad:
+        squad[column] = None
 
-# ---- Selection -------------------------------------------------------------
-top_boat = st.selectbox("Top boat", list(BOATS.keys()))
-per_side = BOATS[top_boat] // 2
-width = st.slider("Borderline places either side of the cut", 1, 3, 1)
+# ---- Edit the squad ------------------------------------------------------------
+st.subheader("Athletes")
+edited = st.data_editor(
+    squad[["name", "side", "best_2k", "coach_rank"]],
+    num_rows="dynamic", hide_index=True, width="stretch",
+    column_config={
+        "name": st.column_config.TextColumn("Name", required=True),
+        "side": st.column_config.SelectboxColumn("Side", options=["S", "B"], required=True),
+        "best_2k": st.column_config.TextColumn("Best 2k", help="Like 6:31.8", required=True),
+        "coach_rank": st.column_config.NumberColumn("Your side rank (optional)", min_value=1, step=1),
+    },
+)
 
-def status(side_rank):
-    if side_rank <= per_side - width:
-        return "In"
-    elif side_rank <= per_side + width:
-        return "Borderline"
+def problems(table):
+    found = []
+    for r in table.itertuples():
+        try:
+            secs = to_seconds(str(r.best_2k))
+            if not 300 < secs < 600:
+                raise ValueError
+        except ValueError:
+            found.append(f"{r.name}: 2k should look like 6:31.8")
+    if table["name"].duplicated().any():
+        found.append("Two athletes have the same name")
+    return found
+
+if st.button("Save squad", type="primary"):
+    issues = problems(edited.dropna(subset=["name"]))
+    if issues:
+        for issue in issues:
+            st.error(issue)
     else:
-        return "Out"
+        edited.dropna(subset=["name"]).to_csv(SQUAD_FILE, index=False)
+        st.success(f"Saved {len(edited.dropna(subset=['name']))} athletes.")
 
-squad["status"] = squad["side_rank"].apply(status)
-
-st.write(f"{top_boat}: {per_side} seats per side")
+# ---- On-water order ------------------------------------------------------------
+st.subheader("Order on the water")
+results = load_results()
+if not results.empty and "source" in results:
+    results = results[results["source"] == "pieces"]
+learned = fit_learning(results, squad) if not results.empty else None
+st.write("Erg speed plus what seat racing has shown so far." if learned else
+         "No seat racing yet, so this is the erg order. It updates as results come in.")
+order = on_water_order(squad, learned)
 col_s, col_b = st.columns(2)
 for col, side, label in [(col_s, "S", "Stroke side"), (col_b, "B", "Bow side")]:
     with col:
-        st.subheader(label)
-        side_df = squad[squad["side"] == side].sort_values("side_rank")
-        st.dataframe(side_df[["side_rank", "name", "adjusted_2k", "status"]], hide_index=True)
-
-# ---- Your order vs the model -------------------------------------------------
-# positive gap = you rank them HIGHER than the model does
-st.subheader("Your order vs the model")
-compare = squad.sort_values("gap", key=abs, ascending=False)
-st.dataframe(compare[["name", "side", "coach_rank", "side_rank", "gap"]], hide_index=True)
-st.write(f"Average gap: **{squad['gap'].abs().mean():.1f} places**. "
-         "Move the tech slider to see when the model agrees with you most.")
-
-# ---- Full ranking ----------------------------------------------------------
-st.subheader("Full ranking")
-st.write(f"{len(squad)} athletes")
-st.dataframe(squad[["rank", "name", "side", "best_2k", "tech_score", "watts", "boat_watts",
-                    "adjusted_2k", "status"]].round(0), hide_index=True)
+        st.markdown(f"**{label}**")
+        side_order = order[order["side"] == side].reset_index(drop=True)
+        side_order.index += 1
+        st.dataframe(side_order[["name", "best_2k", "boat_moving", "races"]].round(2).rename(
+            columns={"boat_moving": "boat-moving"}))
