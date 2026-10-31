@@ -2,7 +2,7 @@
 
 A crew selection tool I built for the University of Exeter Boat Club (about 300 members). It plans seat races, records results on the launch, and learns from every result how much each athlete really moves a boat compared with what their erg score predicts.
 
-**Try the demo:** [link to the demo app] (made-up squad, so no real athlete data)
+**Try the demo:** [seat-race-demo.streamlit.app](https://seat-race-demo.streamlit.app). It uses a made-up squad and a pretend season, so there's no real athlete data, and anything you change stays in your own browser tab. The app may take about 30 seconds to wake up.
 
 ![The Plan page](screenshot.png)
 
@@ -37,7 +37,7 @@ python simulate_season.py      # optional: a pretend season for the Learning pag
 streamlit run app.py
 ```
 
-Without any setup it runs on `sample_squad.csv`, a made-up squad, and saves to local files. The club version saves to a private Google Sheet: each squad signs in with its own password and only sees its own athletes and results, and nobody using the app can see the sheet itself. Real athlete data never goes on GitHub.
+Without any setup it runs on `sample_squad.csv`, a made-up squad, and saves to local files. The public demo starts from `demo_app.py` with `demo = true` in its secrets, which gives every visitor their own copy of the made-up data. The club version saves to a private Google Sheet: each squad signs in with its own password and only sees its own athletes and results, and nobody using the app can see the sheet itself. Real athlete data never goes on GitHub.
 
 ## What I learned
 

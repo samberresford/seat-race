@@ -1,3 +1,4 @@
+import base64
 from itertools import combinations
 
 from datetime import date
@@ -306,20 +307,26 @@ if st.button("Use this plan: save it for recording results", type="primary"):
 # on a shared screen, hide the rest of the plan so athletes can't see the swaps coming
 coach_view = st.toggle("Coach view: show the whole plan", value=True)
 
+def draw(svg):
+    """Shows a diagram as an image (newer Streamlit versions strip drawings out of HTML)."""
+    data = base64.b64encode(svg.encode()).decode()
+    st.markdown(f'<img src="data:image/svg+xml;base64,{data}" style="width:100%" alt="Crews for this piece">',
+                unsafe_allow_html=True)
+
 def show_piece(pieces, k):
     piece = pieces[k - 1]
     swap = piece["swap"]
     with st.container(border=True):
         if swap is None:
             st.markdown(f"**Piece {k}: start crews** (baseline). Predicted: Boat 1 {piece['margin']:+.1f} s")
-            st.html(piece_svg(piece["crews"]))
+            draw(piece_svg(piece["crews"]))
         else:
             a, b, side, _, _ = swap
             side_word = {"S": "stroke side", "B": "bow side", "stroke": "the strokes swap boats"}[side]
             swing = pieces[k - 2]["margin"] - piece["margin"]
             leader = a if swing >= 0 else b
             st.markdown(f"**Piece {k}: swap {a} ↔ {b}** ({side_word}). Predicted: Boat 1 {piece['margin']:+.1f} s")
-            st.html(piece_svg(piece["crews"], swapped=(b, a)))
+            draw(piece_svg(piece["crews"], swapped=(b, a)))
             if coach_view:
                 st.caption(f"Model expects {leader} by about {abs(swing) / 2:.1f} s.")
 

@@ -27,10 +27,12 @@ def to_time(s):
     return f"{int(s // 60)}:{s % 60:04.1f}"
 
 
-# short name for diagrams: "Elliott Lynch Warden" -> "Elliott L"
+# short name for diagrams: "Elliott Lynch Warden" -> "Elliott L", but "Athlete 01" stays whole
 def short_name(name):
     parts = name.split()
-    return parts[0] if len(parts) == 1 else f"{parts[0]} {parts[1][0]}"
+    if len(parts) == 1 or any(ch.isdigit() for ch in parts[1]):
+        return name
+    return f"{parts[0]} {parts[1][0]}"
 
 
 def on_water_order(squad, learned):
